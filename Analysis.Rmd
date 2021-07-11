@@ -1,0 +1,351 @@
+---
+title: "Untitled"
+author: "Alberto De Benedittis"
+date: "8/7/2021"
+output:
+  word_document: default
+  html_document: default
+---
+# Libraries 
+These are the libraries that we need in order to perform the following analysis
+```{r}
+library("memisc")
+library("readxl")
+library('FactoMineR')
+library('corrplot')
+library('psych')
+library('factoextra')
+library('ggplot2')
+library('party')
+library('tree')
+library('randomForest')
+library('rpart')
+library('poLCA')
+library('pls')
+```
+# Analysis  
+__IMPORT THE DATA__
+The data set that we will use for the analysis has been created by merging different data sets (one for each nation) stored as a csv file and retrieved from the following link: https://osf.io/vhnk7/. 
+```{r}
+C19Nations <-  read.csv('C:/Users/alber/Desktop/Datasets around the world/prova_full2.csv')
+```
+This data set contains contains the results of a survey that involves people from 11 different countries. The survey's aim is to understand how the risks related to COVID-19  are perceived around the world. Moreover, with this analysis we want to understand if there are similarities/differences among the countries.In addition, we want to investigate if the differences/similarities may be associated to some cultural factors or if they depend on other elements such as worldview, trust in the institutions, or other personal factors that could be the education level, age, political orientation and so on. 
+__DATA EXPLORATION__
+```{r}
+dim(C19Nations)
+```
+The data set is made of 7697 observations and 110 variables. 
+Each variable corresponds to a question while each observation corresponds to the answer of one of the subjects involved in the survey. 
+```{r}
+table(C19Nations$Residency)
+```
+
+
+The respondents of the survey are almost 700 for each nation. 
+The countries where the survey 'took place' are the following: Austria, China, Germany, Spain, Italy, Japan, South Korea, Mexico, Sweden, United Kingdom and United states. 
+These countries have been chosen for their cultural and geographic diversity and to represent countries at different stages of the pandemic, with different government policies. Data collection took place between mid March and mid April 2020. 
+The respondents have been chosen in order to provide a nationally representative quota sample stratified by age, gender and ethnicity. 
+Gender and age have been divided in 4 macro classes:
+for gender, we have 1 = female, 2 = male, 3 = other, 4 = prefer not to say;
+for the ages, we have 1 = 18-24, 2 = 25-34, 3 = 35-44, 4 = 45-54, 5 = 55-64, 6 = 65+;
+```{r}
+table(C19Nations$DemGen) # Genders
+table(C19Nations$quota_age) # Ages
+```
+As we can see from the results we have almost an equal distributions between males and females. The same holds for the number of participants in each age class. 
+
+Now let's focus on the variables in the data set. 
+```{r}
+colnames(C19Nations)
+```
+By carefully looking at the questionnaire together with the data set we have notice some issues. Up to the 77th column there are no problems, but after that there are problems because the question associated to the answer is not correct. Indeed, due to the presence of some open questions whose answers have not been reported in the csv files we have to make some manual adjustments to the data set. Unfortunately, we have also to delete 16 variables because we have not been able to associate them with absolute certainty to the answers. Hence, in order to bias our analysis we prefer to work on a reduced data set. Nevertheless, the data set is still informative and rich in information. 
+```{r}
+#colnames(C19Nations[78:110])
+
+new_names <-  c("Govresponse_1","Govresponse_2","Govresponse_3",  
+"Govresponse_4","Govresponse_5","Govresponse_6",
+"Govresponse_7","Govresponse_8","Govresponse_9",  
+"Govrestrict_1", "Govrestrict_2"  , "Govrestrict_3"  ,
+"Sciunderstand",   "KnowledgeCert_1" , "KnowledgeCert_2","Vaccine_1","Vaccine_2")
+
+```
+`new_names` is the vector with the new column names associated to to columns from 78 to 94. 
+```{r}
+C19Nations <-  C19Nations[,1:94]
+j <-  1
+for (i in (78:94)){
+  names(C19Nations)[i]<- new_names[j]
+  #colnames(C19Nations[i]) <- new_names[j]
+  j <-  j +1
+  }
+```
+We have cut the data set which is now made by the same number of information and 94 columns.
+```{r}
+colnames(C19Nations)
+```
+Our dependent measure _COVID-19 Risk Perception_ was measured as an index, covering affective, cognitive, and temporal-spatial dimensions to provide a holistic measure of risk perception (Dryhurst et. al, 2020). The index included items capturing participants' perceived seriousness of the COVID-19 pandemic, perceived likelihood of contracting the virus themselves over the next 6 months, perceived likelihood of their family and friends catching the virus, and their present level of worry about the virus (Dryhurst et. al, 2020).  The answers relatively to _COVID-19 Risk Perception_ are labeled as `CanadaQ`.
+The first 4 variables are  'demographic variables'.
+The first,`Enddate` gives information about the day and the time when the survey has been submitted, `DemGen` that as we have seen before gives information on the gender of the respondents, `quota_age` gives information about the age class (from 1 to 6), `Residency` gives information about the nationality of the participants.
+All the others variables are psychological predictors which were broadly mapped based on the model by van der Linden (2015), and included measures of cognition, affect/personal experience,  and social and cultural norms. Specifically, have been included items on knowledge, both personal knowledge and social knowledge, direct personal experience with the virus, as well as prosocial values and individualistic worldviews (via the individualism-communitarism dimension of the cultural cognition scale (Kahan 2012)). The model of van der Linden (2015) has been further extended by including measures of trust (trust in government, trust in science, trust in medical professionals), and efficacy (personal and collective), as reccomended by van der Linden (2015) and Xie et al. (2019), especially since these were deemed important in the context of risk perception of COVID-19 and previous pandemics (de Zwart et.al 2009, Prati and Pietrantoni 2016).  
+The scale used for collecting the answers is a Likert scale that ranges from 1 to 7 or 1 to 5 where 1 is associated to a 'negative response' for example,`not at all worried`, `strongly disagree`, `not at all`, `very limited understanding`, while 5 or 7 is associated to `very worried`, `very likely`, `strongly agree`, `very good understanding`. 
+
+Now that we have a good understanding of our data set we can start our analysis. 
+Before performing specific analysis, we want to create a response variable that summarizes the results obtained by the question relative to Covid Risk Perception. 
+```{r}
+# Answers range between 1 and 5 where 1 is strongly disagree and 5 is storngly agree. 
+table(C19Nations$CanadaQ_1) # Getting sick with the coronavirus/COVID-19 can be serious.
+table(C19Nations$CanadaQ_2) # I will probably get sick with the coronavirus/COVID-19.
+table(C19Nations$CanadaQ_3) # The coronavirus/COVID-19 will NOT affect very many people in the country I'm currently living in.
+```
+Thus, we make a rough estimate creating the variable `C19RiskPerc` which is simply an average of the response. 
+To create it we assigned a negative weight to CanadaQ3 and positive weight to CanadaQ1 and CanadaQ2. We did  so because the first two questions are associated with higher worry while the thrid is associated with less worry about the virus. 
+More specifically, we think that it is reasonable to believe that people who think that getting virus is dangerous are the ones who perceive an higher risk. 
+The same hold for people who think that it is likely to being infected. 
+On the other hand, people who think that the virus won't affect many people are the ones who are not that worried about the virus. 
+```{r}
+C19Nations$C19RiskPerc <-  C19Nations$CanadaQ_1 + C19Nations$CanadaQ_2 - C19Nations$CanadaQ_3 
+
+table(C19Nations$C19RiskPerc)
+
+```
+The results of this average have produced values that ranges between 9 and -3. Where 9 is associated with highest COVID Risk Perception and -3 to the lowest Risk Perception. 
+Now that we have this new variable that summarizes the results COVID-19 Risk Perception, we can drop the old three variables
+```{r}
+C19Nations <-  C19Nations[,-c(32:34)]
+```
+Now that we are ready to better explore our data set. 
+```{r}
+summary(C19Nations)
+```
+From this summary we get many useful information about the distribution of the values for each predictor. However, one important that needs to be highlighted is that there are many NAs (missing values/answers). This could be very dangerous because it may create many problems for our analysis. 
+Deleting all the observations with missing values could be a very dangerous strategy because that would tremendously reduce the size of the data set. 
+
+```{r}
+df_withoutNAs <-  na.omit(C19Nations)
+table(df_withoutNAs$Residency)
+```
+Indeed, we see that `df_withoutNAs` contains just 1685 observations which is much less than the original one. 
+Thus, we may try to substitute the missing values with the average answers of respondents with the same nationality. We adopt this strategy because we think that it is more likely that people from the same country have more similar idea. In addition, some of the questions involve the degree of trust in the media, the government and the how much they are  focusing the attention of COVID-19.
+
+
+```{r}
+nations_label <-  c('AU','CN','DE', 'ES',  'IT',  'JP',  'KR',  'MX',  'SE',  'UK','US')
+length(nations_label)
+for( k in (1:length(nations_label))){
+  for (kk in (5:ncol(C19Nations))){
+    if (kk != 74){ # We do not consider the variable prep because for that questions multiple answers were allowed
+          mean_country <- (mean(C19Nations[C19Nations$Residency == nations_label[k],kk], na.rm = T))
+          C19Nations[is.na(C19Nations[,kk]), kk] <- round(mean_country)
+    }
+  } 
+}
+```
+```{r}
+summary(C19Nations)
+
+```
+Now as we can see there are no missing values that could interfere with our analysis. 
+
+One of the first thing that we want to see is if there are substantial differences among the 11 countries relatively to the COVID-19 Risk Perception.
+
+__COMPARISON BETWEEN COUNTRIES__
+```{r}
+Risk_per_nation <-  c()
+for (k in 1: length(nations_label)){
+  Risk_nation <-  (mean(C19Nations[C19Nations$Residency == nations_label[k], 'C19RiskPerc'], na.rm = T))
+  Risk_per_nation <-  append(Risk_per_nation,Risk_nation)
+} 
+```
+
+```{r}
+Risk_X_Nation <- data.frame(nations_label, Risk_per_nation)
+theme_set(theme_bw())  
+# Data Prep
+
+
+Risk_X_Nation$RPC_z <- round((Risk_X_Nation$Risk_per_nation- mean(Risk_X_Nation$Risk_per_nation))/sd(Risk_X_Nation$Risk_per_nation), 2)  # compute normalized mpg
+Risk_X_Nation$type <- ifelse(Risk_X_Nation$RPC_z  < 0, "below", "above")  # above / below avg flag
+Risk_X_Nation <- Risk_X_Nation[order(Risk_X_Nation$RPC_z), ]  # sort
+Risk_X_Nation$nations_label <- factor(Risk_X_Nation$nations_label, levels = Risk_X_Nation$nations_label)  # convert to factor to retain sorted order in plot.
+
+# Diverging Barcharts
+ggplot(Risk_X_Nation, aes(x=nations_label, y=RPC_z, label=RPC_z)) + 
+  geom_bar(stat='identity', aes(fill=type), width=.5)  +
+  scale_fill_manual(name="COVID-19 Risk Perception", 
+                    labels = c("Above Average", "Below Average"), 
+                    values = c("above"="#00ba38", "below"="#f8766d")) + 
+  labs(subtitle="Normalised COVID-19 Risk Perception '", 
+       title= "Diverging Bars") + 
+  coord_flip()
+
+```
+The results of this plot are consistent with the results obtained by Dryhurst et. al. Indeed, the country which shows the highest COVID-19 risk perception is the UK followed by the US and Spain. On the other hand, there are China Mexico and Japan with the lowest COVID-19 Risk Perception. 
+However, at a first look we may say that western countries namely, the European and North American countries, are the ones where the population is more worried about the virus. On the other hand, Asian countries and the Latin American country seem to be less worried about the virus. 
+In the light of the above, we may start thinking of differences due to some cultural aspect or general behavior. For example, we may think that Chines people are less worried because they have an higher trust in government (just an hypothesis.)
+We could also visualize the same information through a box plot. Indeed, thanks to boxplot we can see if some predictor has discriminative power over the response variable. 
+```{r}
+boxplot(C19Nations$C19RiskPerc ~ C19Nations$Residency , 
+    col= c('firebrick1','red4', 'goldenrod1' ,'orangered' ,'seagreen' ,'lightblue1','skyblue4','springgreen4','yellow','dodgerblue','navyblue'), 
+    ylab="COVID-19 Risk Perception" ,
+    xlab="- Country -",
+    main = 'Country & Risk Perception')
+ 
+# Add a legend
+```
+
+
+
+__COMPARISON BETWEEN GENDER__
+
+According to different studies, males tend to be more _risk-prone_ compared to females (Savadori, 2004). 
+Let's see if this holds also in this case.
+In order to do so, we can first of all comparing two box-plot.
+```{r}
+# Recall that 1 stands for females and 2 for males. We do not consider the other two classes because the results would not be statistically reliable due to the scarcity of the sample. 
+C19Nations$GenderT <- ifelse(C19Nations$DemGen == 1, 'Female', 'Male')
+
+# Build the plot
+boxplot(C19Nations$C19RiskPerc ~ C19Nations$GenderT , 
+    col= c('orchid1','skyblue1'), 
+    ylab="COVID-19 Risk Perception" ,
+    xlab="- Gender -",
+    main = 'Gender & Risk Perception')
+ 
+# Add a legend
+legend("bottomleft", legend = c("Female","Male") , 
+    col = c('orchid1','skyblue1') , bty = "n", pch=20 , pt.cex = 3, cex = 1, horiz = FALSE, inset = c(0.03, 0.1))
+
+```
+As we can see from the above plot, there is not a substantial difference in the risk perception among genders. Indeed, although females have a slightly higher Risk Perception level, the average of the two classes (in the boxplot is represented by the solid black line inside the boxes) is the same. 
+__COMPARISON BETWEEN AGES__
+We could perform the same analysis considering the different age classes. 
+```{r}
+# Build the plot
+boxplot(C19Nations$C19RiskPerc ~ C19Nations$quota_age , 
+    col= c('lightblue1','springgreen', 'goldenrod1' ,'firebrick1' ,'orchid1' ,'moccasin'), 
+    ylab="COVID-19 Risk Perception" ,
+    xlab="- AGE -",
+    main = 'Age & Risk Perception')
+ 
+# Add a legend
+legend("bottomright", legend = c('1 = 18-24', '2 = 25-34', '3 = 35-44', '4 = 45-54', '5 = 55-64', '6 = 65+') , col = c('lightblue1','springgreen', 'goldenrod1' ,'firebrick1' ,'orchid1' ,'moccasin') , bty = "n", pch=20 , pt.cex = 3, cex = 1, horiz = FALSE, inset = c(0.03, 0.1))
+
+```
+As we can see, also for the ages we cannot spot any particular difference in risk perception. This information is quite important because one could hypothesize that elderly people could be more scared by the virus due to the fact that it is more dangerous for them. 
+
+__FURTHER ANALYSIS__
+From the first data exploration we are not able to detect any particular pattern or specific predictor that may suggest any strong relation with the response variable `C19RiskPerc` a part from the nation that seems to have some influence on the response variable.
+__LINEAR REGRESSION__
+Thus, the first thing that we can do is to perform the simplest model: the linear regression. 
+Namely, we want to predict the the degree of risk perception given the response to the different questions. 
+```{r}
+#  regression on the continuous varaiables
+linear.regression <- lm(C19RiskPerc~., data = C19Nations[-c(1,2,3,4,74)])  
+summary(linear.regression)
+
+```
+Now that we have performed a linear regression model. We can interpret the result thanks to the summary.
+The results of the linear model are not perfect. Indeed, a first measure of the goodness of the model is provided by the Adjusted R^2 which is equal to 0.40. Thus, there is not a perfect linear relationship between the predictors and the response variable. 
+Moreover, thanks to the summary of the linear regression we are able to detect which are the most important predictors and also to grade them with three levels of importance:
+The most important predictors are the following: Trustingroups_10, Trustingroups_11, COVIDeffect_1, FinitePool_2, FinitePool_3,Longitude_1, Friends_8, MediaExp_4, Govresponse_6, Govrestrict_1, KnowledgeCert_2. 
+Then we have: Trustingroups_7, Trustingroups_6,  COVIDeffect_3, CultCog_6,Personal_1, Personal_3,  Personal_1,Personal_3,journalisttrustQ1, WHOtrustQ1. 
+Lastly, there are: GenSocTrust, Trustingroups_3, Trustingroups_13, COVIDeffect_3, COVIDeffect_3, CultCog_4, SARS, FinitePool_5, Longitude_3, Personal_4, Personal_6, Personal_7, MediaExp_1, MediaExp_3, MediaExp_7, Vaccine_2,Govresponse_5,Govresponse_7.  
+<br>
+The results provided by the linear model are partially in line with the results obtained by the research conducted by Dryhurst et.al (2020). Indeed, we can roughly say that the respond variable is affected by the individualistic views and by prosociality which are two macro-categories to whom many of the important variables belong. 
+It is also nice to notice that some variables belonging to the class of FinitePool have been included. Indeed, these variables are interesting because they refer to the level of worry perceived by the respondents to different topics: Climate change, COVID-19, Political disagreement, Immigration, Unemployment, Terrorism, Air Pollution, Crime. Moreover, the ones that have been highlighted by the linear model are the ones regarding COVID-19, Political disagreement and Unemployment. 
+This is interesting because these three topics are strongly connected between each other. Indeed, due to COVID-19 there is and there has been an economic crisis worldwide; political disagreement on the other hand, is an hot topic as well, because politicians had and have to take common decisions in order to effectively face the virus and political uncertainty is definitely a risk in the 'war' against the virus. Thus, this result look quite interesting and convincing. 
+In addition, we notice the presence of longitude_1 as a first class predictor and longitude_3 as a second class predictor. This is interesting because they refer to the level of worry in different moment. Indeed, longitude_1 refers to the level of worry relative to COVID-19 one week before the survey, and longitude_3 refers to the level of worry relative to COVID-19 2 months before the day of the survey. 
+This results is interesting because we may hypothesize that the first to perceived the risk of COVID-19 are also the ones that perceived more the risk. 
+Nevertheless, the linear model has many limits. First of all, the results are difficult to interpret due to the high number of predictors. 
+Thus, in order to have better results we should reduce the dimensionality of the data set or using some statistical technique to perform variable selection. 
+<br>
+However, before using this sophisticated techniques we could try to use tree based methods. 
+Thus, as before we start with the simplest model and then we try to improve its performance. 
+__REGRESSION TREE__
+```{r}
+reg.tree <- tree(C19RiskPerc ~., data=C19Nations)
+summary(reg.tree)
+plot(reg.tree)
+text(reg.tree, pretty = 0)
+```
+The results provided by the simple regression three outline that the relevant predictors for estimating the COVID-19 Risk Perception are the following: "FinitePool_2", "Personal_8", "Personal_7", "Friends_8", "Govrestrict_1". 
+Here it is interesting noting that the most important predictor is FinitePool_2 which, as already said, correspond to the answer to the following question _How worried are you personally about COVID-19 at present?_. The other predictors are in line with the results of Dryhurst et.al (2020). According to them, the personal sphere is important to assess the Risk Perception of individuals. 
+To conclude, we have also to mention the limits of the simple regression tree. It is typically characterized by high variance and tends to overfit the data. 
+Thus, to improve the performances we can try with the random forest. 
+
+__RANDOM FOREST__
+```{r}
+rf.C19 <-  randomForest(C19RiskPerc ~., data = C19Nations[, -c(1,2,3,4,74,93)], mtry=9, importance =TRUE)
+importance (rf.C19 )
+varImpPlot (rf.C19, main = 'Importance of Predictors' )
+```
+The random forest typically provides an improvement in the performance of the simple regression tree. As a matter of fact, the random forest averages many (by default 500) different and decorrelates trees. This last property is particularly important in this context because many predictors are correlated because they belong to the same macro class. 
+Having clear this statistical background, we can move on and focus on the output. 
+Due to the fact that we are averaging many different trees, we are not able to plot a tree based model as before. Nevertheless, we can plot the so called importance plot. From this graphical representation we can get many useful information.
+The most important predictor for the above model is `Personal_8`. This predictors is associated to the following question: _How likely do you think it is that you will be directly and personally affected by the COVID-19 in the next 6 months?_
+The second most important predictor is `Friends_8` which is similar to the previous one: _How likely do you think it is that your friends and family in the country you are currently living in will be directly affected by the COVID-19 in the next 6 months?_
+As said before during the review of the linear regression's results, the output of the analysis is coherent with previous researches( __CITARE__ ) where it has been found that the perception of risk is influenced by indicators of experience with the virus.  
+Then the third predictor for importance is `FinitePool_2` which has already been discussed. 
+The other predictors, according to the output of the random forest, are associated with the level of trust in the institutions and science (national government & WHO) and with prosocial behavior. 
+<br>
+At this point of the analysis in order to further investigate the relationships between the response variable and the other predictors we have two options:  
+Apply some sophisticated statistical technique in order to improve the performances of the linear model. For example, we could perform variable selection or using some shrinkage methods (Ridge or Lasso). However, the drawback of these methods is that they improve the performances at the cost of the interpretability of the results. 
+The other approach would involve a transformation of the dataset. Indeed, a possible approach would be performing the Principal Component Analysis in order to reduce the dimensionality of the data set retaining as much variance as possible. 
+Moreover, we could also remain in the context of supervised learning applying the so called partial least squares. 
+We prefer to follow this last approach because our aim is to understand the underlying relations between variables and not improving the accuracy of our predictions (also because we do not have any validation set on which we could test the trained models.)
+__PRINCIPAL COMPONENT ANALYSIS__
+```{r}
+pc.out <-  prcomp(C19Nations[,-c(1,2,3,4,74,93)], scale. = T)
+summary(pc.out)
+```
+
+From the summary we get that each component explains a small amount of variance. Indeed, the first two principal components explain only the 20% of the variance together  and a reasonable level of variance (around 80%) is reached only with 40 components. 
+Nevertheless, this is still an improvement compared to the original data set. 
+```{r}
+fviz_screeplot(pc.out, ncp=40)
+```
+With the scree plot we can visualize the amount of variance explained by each of the first 40 components. 
+We also notice that after the third component the amount of variance explained is less than 5%. 
+This is not an ideal situation. 
+```{r}
+fviz_pca_var(pc.out,  col.var = "cos2" ,gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+```
+Although the above plot is quite confusing, we can still try to make some assumptions. 
+Firstly, we can say that despite the overlapping of variables, we can still spot three main areas: the bottom left, the bottom right and the upper left. 
+According to what we are able to see, it seems that the bottom left represent the variables concerning prosocial behaviors and let's a more emotional part; in the bottom right we instead may spot the variables associated to the level of trust in institutions and science. Lastly, in the top left we see the variables associated with the knowledge of the virus. 
+However, before moving on we have to be clear on the fact that the above are just assumptions and intuitions. Indeed, unsupervised learning techniques are by default difficult to interpret and it is also difficult to assess the level of certainty. Moreover, due to the overlapping is more difficult to interpret the output and find reliable information. 
+Lastly, before concluding this stage of the analysis we can perform the _partial least squares_. This methods help us in order to understand how many components are need to explain the variance in the dataset relatively to the response variable.
+```{r}
+pls_fit = plsr(C19RiskPerc ~ ., data = C19Nations[,-c(1,2,3,4,74,93)], scale = T, validation = "CV")
+validationplot(pls_fit, val.type = "MSEP")
+```
+From this plot seems that less than 20 components are enough to get the variance associated to the COVID19 Risk Perception. 
+
+Lastly, before concluding the analysis on this data set it seems reasonable to perform the _Latent Class Analysis_. 
+We use _LCA_ when we are interested in identifying and understanding unobserved classes.
+Indeed, _LCA_ is used in behavioral research as this one in order to classify people who are more likely to exhibit specific behavior such as an higher risk perception. 
+__LATENT CLASS ANALYSIS__
+In order to perform PoLCA we create a new reduced dataset in order to make the results more interpretable.  
+To do so we will consider just the first most important predictors according to the random forest importance plot and the summary of the linear regression. 
+```{r}
+C19LCA <- C19Nations
+for(iii in (1:ncol(C19LCA))){
+  C19LCA[,iii] <-  as.factor(C19LCA[,iii])
+}
+```
+
+```{r}
+f <-  cbind(C19RiskPerc, Personal_8, Friends_8, FinitePool_2, Longitude_1) ~ 1 
+datapolca <- C19LCA[,c('C19RiskPerc', 'Personal_8', 'Friends_8', 'FinitePool_2', 'Longitude_1')]
+LCA.fit <-  poLCA(f, data = datapolca ,nclass=2, graphs = TRUE)
+LCA.fit
+```
+It is important to stress that LCA is an unsupervised technique. Indeed, the number of classes cannot be defined from the beginning. However, we think that the output with two classes is fair enough. 
+Indeed, what it seems from the results is that people can be roughly classified in two classes. The first one, which correspond to the 48% of the population can be labeled as the most worried. Indeed, people belonging to this class are more worried than others. On the other hand, the second class 52% of the sample population can be labeled as moderate worried. As a matter of fact, these kind of people do not show low levels of risk perception or worry, but simply less extreme values. It is particularly interesting notice the trend of the values relative to C19RiskPerc: the distribution of the values is really close to normal distribution. 
+
+__FINAL COMMENT__
+From this first analysis on COVID-19 Risk Perception we may conclude that people tend to be perceive an higher risk relatively to covid-19 if they are generally more sensitive to risk, were worried by the virus before the spread of the virus, think that there is an high probability for themselves and their friends/family to be infected. Moreover, according to the linear model (which gives information also about the sign of the predictors) people that have an high level of trust in institutions and in science are perceive the virus as less dangerous. 
+Lastly, according to LCA, almost everyone is worried about the pandemics but there is half of the population that tends to be more worried and it is characterized by higher level of COVID-19 Risk Perception. 
+
+
+
