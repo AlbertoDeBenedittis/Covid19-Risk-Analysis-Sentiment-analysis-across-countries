@@ -35,10 +35,10 @@ The aim of the following analysis is to collect tweets related to COVID from dif
 
 __ACCESS TO TWITTER__
 ```{r}
-consumerKey <-  'E7vtgR1hOr9baonm81zbUxRP9'
-consumerSecret <-  'L2njsBnBYd5OCwjCblOGS5fFxRHDmaO3SJ6J71Laxk4iayz6XT'
-accessToken <-  '1412790874531041283-GASGSlwxW0sL4EqgpuVgue540eNaPb'
-accessTokenSecret <-  'dFuKTxEmcFCIHmfW3mjITLDSb8Ax9CKGeHb0vlqkQ8bCq'
+consumerKey <-  
+consumerSecret <-  
+accessToken <-  
+accessTokenSecret <-  
 setup_twitter_oauth(consumerKey,consumerSecret,accessToken,accessTokenSecret)
 ```
 # ITALY 
